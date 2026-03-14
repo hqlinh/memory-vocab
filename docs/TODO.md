@@ -82,11 +82,11 @@ Danh sách công việc triển khai theo [PRODUCT_SPEC.md](./PRODUCT_SPEC.md). 
 
 ## Phase 7: Migrate sang Next.js + BE + MongoDB
 
-- [ ] **init-next**: Tạo project Next.js Page Router mới và migrate cấu trúc UI cơ bản (Layout, Tailwind, shadcn, Toaster).
-- [ ] **model-db**: Định nghĩa type vocab và MongoDB layer (client + service functions) dựa trên schema hiện tại.
-- [ ] **api-routes**: Tạo Next.js API routes cho CRUD vocab dùng MongoDB service.
-- [ ] **migrate-pages**: Chuyển các route React Router hiện tại thành các page trong Next.js Page Router, giữ lại Layout.
-- [ ] **wire-ui-api**: Cập nhật các page/form để gọi API mới thay vì Dexie/IndexedDB, thêm loading/error state.
+- [x] **init-next**: Tạo project Next.js Page Router mới và migrate cấu trúc UI cơ bản (Layout, Tailwind, shadcn, Toaster).
+- [x] **model-db**: Định nghĩa type vocab và MongoDB layer (client + service functions) dựa trên schema hiện tại.
+- [x] **api-routes**: Tạo Next.js API routes cho CRUD vocab dùng MongoDB service.
+- [x] **migrate-pages**: Chuyển các route React Router hiện tại thành các page trong Next.js Page Router, giữ lại Layout.
+- [x] **wire-ui-api**: Cập nhật các page/form để gọi API mới thay vì Dexie/IndexedDB, thêm loading/error state.
 - [ ] **deploy-vercel**: Kết nối với MongoDB Atlas, set env trên Vercel, deploy và smoke test CRUD.
 
 ---
