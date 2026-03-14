@@ -9,6 +9,21 @@ type State = {
 
 const clientCache = new Map<string, State>();
 
+function speakWithBrowser(word: string): boolean {
+  const w = word?.trim();
+  if (!w || typeof window === "undefined" || !window.speechSynthesis) return false;
+  try {
+    const u = new SpeechSynthesisUtterance(w);
+    u.lang = "en-US";
+    u.rate = 0.9;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getInitialState(key: string): State {
   if (!key) return { audioUrl: null, phonetic: null, loading: false, error: null };
   const cached = clientCache.get(key);
@@ -26,10 +41,13 @@ export function usePronunciation(word: string | undefined) {
 
   const fetchPronunciation = useCallback(async () => {
     if (!key) return;
+    const textToSpeak = word?.trim() || key;
+    const playFallback = () => speakWithBrowser(textToSpeak);
+
     const cached = clientCache.get(key);
     if (cached?.audioUrl) {
       const audio = new Audio(cached.audioUrl);
-      audio.play().catch(() => {});
+      audio.play().catch(playFallback);
       return;
     }
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -39,6 +57,7 @@ export function usePronunciation(word: string | undefined) {
       if (!res.ok) {
         const err = data?.error ?? "Không tìm thấy phát âm";
         setState({ audioUrl: null, phonetic: null, loading: false, error: err });
+        playFallback();
         return;
       }
       const { audioUrl, phonetic } = data;
@@ -52,7 +71,9 @@ export function usePronunciation(word: string | undefined) {
       setState(next);
       if (audioUrl) {
         const audio = new Audio(audioUrl);
-        audio.play().catch(() => {});
+        audio.play().catch(playFallback);
+      } else {
+        playFallback();
       }
     } catch {
       setState({
@@ -61,8 +82,9 @@ export function usePronunciation(word: string | undefined) {
         loading: false,
         error: "Lỗi tải phát âm",
       });
+      playFallback();
     }
-  }, [key]);
+  }, [key, word]);
 
   return {
     ...state,

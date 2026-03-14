@@ -45,12 +45,21 @@ export default async function handler(
     let audioUrl = "";
     let phonetic = "";
     if (Array.isArray(phonetics)) {
+      // Prefer entry that has both audio and phonetic text
+      let best: { audioUrl: string; phonetic: string } | null = null;
       for (const p of phonetics) {
-        if (p?.audio && typeof p.audio === "string" && p.audio.trim()) {
-          audioUrl = p.audio.startsWith("http") ? p.audio : `https:${p.audio}`;
-          if (p.text && typeof p.text === "string") phonetic = p.text;
-          break;
+        const rawAudio = p?.audio && typeof p.audio === "string" ? p.audio.trim() : "";
+        if (!rawAudio) continue;
+        const url = rawAudio.startsWith("http") ? rawAudio : `https:${rawAudio}`;
+        const text = (p?.text && typeof p.text === "string" ? p.text : "") || "";
+        if (!best || (text && !best.phonetic)) {
+          best = { audioUrl: url, phonetic: text };
+          if (text) break; // prefer first with both audio + text
         }
+      }
+      if (best) {
+        audioUrl = best.audioUrl;
+        phonetic = best.phonetic;
       }
     }
     if (!audioUrl) {
