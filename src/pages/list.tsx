@@ -10,7 +10,7 @@ import {
 import { apiGetCategories } from "@/lib/category-api";
 import type { Category } from "@/types/category";
 import type { VocabEntry, WordType } from "@/types/vocab";
-import { WORD_TYPE_LABELS } from "@/types/vocab";
+import { WORD_TYPE_LABELS, getSensesByType, getOrderedWordTypes } from "@/types/vocab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Pencil, Trash2, Image as ImageIcon, List } from "lucide-react";
 import { toast } from "sonner";
+import { PronunciationButton } from "@/components/PronunciationButton";
 
 type SortKey = "createdAt" | "updatedAt" | "word";
 
@@ -423,7 +424,12 @@ function DetailModal({
     <Dialog open={!!entryId} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col rounded-xl" showCloseButton>
         <DialogHeader>
-          <DialogTitle className="pr-8 text-xl">{entry?.word ?? "…"}</DialogTitle>
+          <DialogTitle className="pr-8 text-xl flex items-center gap-2">
+            {entry?.word ?? "…"}
+            {entry?.word && (
+              <PronunciationButton word={entry.word} size="icon-xs" variant="ghost" showPhonetic />
+            )}
+          </DialogTitle>
         </DialogHeader>
         <ScrollArea className="flex-1 max-h-[60vh] -mx-2 px-2">
           {detailError ? (
@@ -456,22 +462,34 @@ function DetailModal({
                 )}
               </div>
 
-              <div>
-                <h4 className="font-semibold text-foreground mb-1.5">Nghĩa</h4>
-                <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                  {entry.meanings.map((m, i) => (
-                    <li key={i}>
-                      <span className="text-foreground font-medium">{m.vietnamese}</span>
-                      {m.examples.length > 0 && (
-                        <ul className="mt-1 ml-4 list-none space-y-0.5 text-muted-foreground">
-                          {m.examples.map((ex, j) => (
-                            <li key={j} className="text-muted-foreground/80">• {ex}</li>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-foreground mb-1.5">Nghĩa theo loại từ</h4>
+                {getOrderedWordTypes()
+                  .filter((t) => getSensesByType(entry)[t]?.length)
+                  .map((wordType) => {
+                    const meanings = getSensesByType(entry)[wordType] ?? [];
+                    return (
+                      <div key={wordType} className="rounded-lg border border-border/40 bg-muted/20 p-3">
+                        <p className="text-xs font-semibold text-primary mb-1.5">
+                          {WORD_TYPE_LABELS[wordType]}
+                        </p>
+                        <ul className="list-disc list-inside space-y-1.5 text-muted-foreground">
+                          {meanings.map((m, i) => (
+                            <li key={i}>
+                              <span className="text-foreground font-medium">{m.vietnamese}</span>
+                              {m.examples.length > 0 && (
+                                <ul className="mt-0.5 ml-4 list-none space-y-0.5 text-muted-foreground">
+                                  {m.examples.map((ex, j) => (
+                                    <li key={j} className="text-muted-foreground/80">• {ex}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
                           ))}
                         </ul>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                      </div>
+                    );
+                  })}
               </div>
 
               {entry.notes?.trim() && (

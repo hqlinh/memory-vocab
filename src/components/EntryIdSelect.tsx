@@ -24,33 +24,48 @@ export function EntryIdSelect({
   );
   const [open, setOpen] = useState(false);
   const [words, setWords] = useState<Record<string, string>>({});
+  const [searchError, setSearchError] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const fetchIdRef = useRef(0);
 
   useEffect(() => {
     if (ids.length === 0) {
       setWords({});
       return;
     }
-    apiGetEntriesByIds(ids).then((entries) => {
-      const map: Record<string, string> = {};
-      entries.forEach((e) => {
-        map[e.id] = e.word;
+    const fetchId = ++fetchIdRef.current;
+    apiGetEntriesByIds(ids)
+      .then((entries) => {
+        if (fetchId !== fetchIdRef.current) return;
+        const map: Record<string, string> = {};
+        entries.forEach((e) => {
+          map[e.id] = e.word;
+        });
+        setWords(map);
+      })
+      .catch(() => {
+        if (fetchId === fetchIdRef.current) setWords({});
       });
-      setWords(map);
-    });
   }, [ids.join(",")]);
 
   useEffect(() => {
     if (!query.trim()) {
       setSuggestions([]);
+      setSearchError(false);
       return;
     }
     debounceRef.current = setTimeout(() => {
-      apiSearchEntriesByWord(query.trim(), excludeId).then((list) => {
-        const existing = new Set(ids);
-        setSuggestions(list.filter((item) => !existing.has(item.id)));
-      });
+      setSearchError(false);
+      apiSearchEntriesByWord(query.trim(), excludeId)
+        .then((list) => {
+          const existing = new Set(ids);
+          setSuggestions(list.filter((item) => !existing.has(item.id)));
+        })
+        .catch(() => {
+          setSuggestions([]);
+          setSearchError(true);
+        });
     }, 200);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -107,6 +122,11 @@ export function EntryIdSelect({
               </li>
             ))}
           </ul>
+        )}
+        {searchError && (
+          <p className="text-xs text-destructive mt-1">
+            Không thể tìm từ. Kiểm tra kết nối và thử lại.
+          </p>
         )}
       </div>
       {ids.length > 0 && (

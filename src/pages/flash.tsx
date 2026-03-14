@@ -9,12 +9,12 @@ import {
   apiGetTopics,
 } from "@/lib/vocab-api";
 import type { VocabEntry } from "@/types/vocab";
-import { WORD_TYPE_LABELS } from "@/types/vocab";
+import { WORD_TYPE_LABELS, getSensesByType, getOrderedWordTypes } from "@/types/vocab";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -34,6 +34,7 @@ import {
   Play,
 } from "lucide-react";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { PronunciationButton } from "@/components/PronunciationButton";
 import { toast } from "sonner";
 
 type FlashMode = "date" | "range" | "topic" | "all";
@@ -238,13 +239,14 @@ export default function FlashCard() {
         {/* Progress bar */}
         <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
           <div
-            className="h-full bg-primary rounded-full transition-all duration-300"
+            className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
             style={{ width: `${((currentIndex + 1) / deck.length) * 100}%` }}
           />
         </div>
 
+        {/* Card flip: 2D scaleX + opacity, tránh mirror 3D */}
         <div
-          className="perspective-[1000px] w-full max-w-md mx-auto cursor-pointer"
+          className="w-full max-w-md mx-auto cursor-pointer select-none relative min-h-[320px]"
           onClick={() => setIsFlipped((f) => !f)}
           role="button"
           tabIndex={0}
@@ -257,56 +259,101 @@ export default function FlashCard() {
           aria-label={isFlipped ? "Lật lại mặt trước" : "Lật xem mặt sau"}
         >
           <div
-            className="relative w-full min-h-[300px] transition-transform duration-500 preserve-3d"
-            style={{ transformStyle: "preserve-3d" }}
+            key={currentIndex}
+            className="absolute inset-0 transition-all duration-[500ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.02] active:scale-[0.98]"
+            style={{ animation: "card-enter 0.4s ease-out both" }}
           >
+            {/* Mặt trước - từ vựng */}
             <div
-              className="absolute inset-0 w-full h-full backface-hidden rounded-2xl border border-border/60 bg-card shadow-lg"
+              className="absolute inset-0 rounded-2xl overflow-hidden transition-all duration-300 ease-out"
               style={{
-                backfaceVisibility: "hidden",
-                transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                opacity: isFlipped ? 0 : 1,
+                transform: isFlipped ? "scaleX(0)" : "scaleX(1)",
+                transformOrigin: "center",
+                pointerEvents: isFlipped ? "none" : "auto",
+                zIndex: isFlipped ? 0 : 1,
               }}
             >
-              <Card className="h-full border-0 shadow-none rounded-2xl">
-                <CardContent className="flex flex-col items-center justify-center min-h-[300px] p-8">
-                  <p className="text-3xl font-bold text-center text-foreground">{entry.word}</p>
-                  <div className="flex flex-wrap gap-1.5 justify-center mt-3">
-                    {entry.types.map((t) => (
-                      <Badge key={t} className="rounded-full bg-primary/10 text-primary border-0">
-                        {WORD_TYPE_LABELS[t]}
-                      </Badge>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-6">Nhấn để lật thẻ</p>
-                </CardContent>
-              </Card>
+              <div
+                className="h-full w-full rounded-2xl border-2 border-primary/20 bg-gradient-to-br from-card via-card to-primary/5 shadow-xl shadow-primary/10"
+                style={{ boxShadow: "0 4px 24px -4px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.04)" }}
+              >
+                <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,oklch(0.52_0.22_280/0.08),transparent)]" />
+                <Card className="h-full border-0 shadow-none rounded-2xl bg-transparent">
+                  <CardContent className="relative flex flex-col items-center justify-center min-h-[320px] p-8">
+                    <span className="absolute top-4 left-4 text-[10px] font-medium uppercase tracking-widest text-primary/60">
+                      Mặt trước
+                    </span>
+                    <div className="flex items-center justify-center gap-2">
+                      <p className="text-3xl font-bold text-center text-foreground drop-shadow-sm">{entry.word}</p>
+                      <PronunciationButton word={entry.word} size="icon" className="rounded-full" showPhonetic />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 justify-center mt-4">
+                      {entry.types.map((t) => (
+                        <Badge key={t} className="rounded-full bg-primary/15 text-primary border border-primary/20">
+                          {WORD_TYPE_LABELS[t]}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-8 flex items-center gap-1.5">
+                      <span className="inline-block size-1.5 rounded-full bg-primary/50 animate-pulse" />
+                      Nhấn hoặc click để lật thẻ
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
+
+            {/* Mặt sau - nghĩa chi tiết */}
             <div
-              className="absolute inset-0 w-full h-full backface-hidden rounded-2xl border border-border/60 bg-card shadow-lg"
+              className="absolute inset-0 rounded-2xl overflow-hidden transition-all duration-300 ease-out"
               style={{
-                backfaceVisibility: "hidden",
-                transform: isFlipped ? "rotateY(0deg)" : "rotateY(-180deg)",
+                opacity: isFlipped ? 1 : 0,
+                transform: isFlipped ? "scaleX(1)" : "scaleX(0)",
+                transformOrigin: "center",
+                pointerEvents: isFlipped ? "auto" : "none",
+                zIndex: isFlipped ? 1 : 0,
               }}
             >
-              <Card className="h-full border-0 shadow-none overflow-hidden rounded-2xl">
-                <ScrollArea className="h-[300px]">
-                  <CardContent className="p-6 text-sm space-y-4">
-                    <div>
-                      <h4 className="font-semibold text-foreground mb-1.5">Nghĩa</h4>
-                      <ul className="list-disc list-inside space-y-1.5 text-muted-foreground">
-                        {entry.meanings.map((m, i) => (
-                          <li key={i}>
-                            <span className="text-foreground font-medium">{m.vietnamese}</span>
-                            {m.examples.length > 0 && (
-                              <ul className="mt-0.5 ml-4 list-none text-muted-foreground">
-                                {m.examples.map((ex, j) => (
-                                  <li key={j}>• {ex}</li>
+              <div
+                className="h-full w-full rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 via-card to-primary/10 shadow-xl"
+                style={{ boxShadow: "0 4px 24px -4px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.04)" }}
+              >
+                <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(ellipse_60%_40%_at_100%_100%,oklch(0.52_0.22_280/0.06),transparent)]" />
+                <Card className="h-full border-0 shadow-none overflow-hidden rounded-2xl bg-transparent">
+                  <ScrollArea className="h-[320px]">
+                    <CardContent className="relative p-6 text-sm space-y-4">
+                      <span className="absolute top-4 right-4 text-[10px] font-medium uppercase tracking-widest text-primary/60">
+                        Mặt sau
+                      </span>
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-foreground mb-1.5">Nghĩa theo loại từ</h4>
+                      {getOrderedWordTypes()
+                        .filter((t) => getSensesByType(entry)[t]?.length)
+                        .map((wordType) => {
+                          const meanings = getSensesByType(entry)[wordType] ?? [];
+                          return (
+                            <div key={wordType} className="rounded-lg border border-border/40 bg-muted/20 p-2">
+                              <p className="text-xs font-semibold text-primary mb-1">
+                                {WORD_TYPE_LABELS[wordType]}
+                              </p>
+                              <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                                {meanings.map((m, i) => (
+                                  <li key={i}>
+                                    <span className="text-foreground font-medium">{m.vietnamese}</span>
+                                    {m.examples.length > 0 && (
+                                      <ul className="mt-0.5 ml-4 list-none text-muted-foreground">
+                                        {m.examples.map((ex, j) => (
+                                          <li key={j}>• {ex}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </li>
                                 ))}
                               </ul>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
+                            </div>
+                          );
+                        })}
                     </div>
                     {entry.notes?.trim() && (
                       <div>
@@ -363,16 +410,17 @@ export default function FlashCard() {
                   </CardContent>
                 </ScrollArea>
               </Card>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-3 flex-wrap">
+        <div className="flex items-center justify-center gap-4 flex-wrap">
           <Button
             variant="outline"
             size="icon"
             disabled={currentIndex === 0}
-            className="rounded-xl size-10"
+            className="rounded-xl size-11 transition-all hover:scale-105 active:scale-95"
             onClick={(e) => {
               e.stopPropagation();
               setCurrentIndex((i) => Math.max(0, i - 1));
@@ -383,20 +431,19 @@ export default function FlashCard() {
             <ChevronLeft className="size-5" />
           </Button>
           <Button
-            variant="outline"
-            className="rounded-xl px-6"
+            className="rounded-xl px-8 py-6 text-base font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-105 hover:shadow-xl hover:shadow-primary/25 active:scale-95"
             onClick={(e) => {
               e.stopPropagation();
               setIsFlipped((f) => !f);
             }}
             aria-label={isFlipped ? "Lật lại mặt trước" : "Lật xem mặt sau"}
           >
-            Lật
+            {isFlipped ? "↩ Lật lại" : "Lật thẻ"}
           </Button>
           <Button
             variant="outline"
             size="icon"
-            className="rounded-xl size-10"
+            className="rounded-xl size-11 transition-all hover:scale-105 active:scale-95"
             onClick={(e) => {
               e.stopPropagation();
               if (currentIndex < deck.length - 1) {
@@ -420,6 +467,13 @@ export default function FlashCard() {
     );
   }
 
+  const modeOptions: { value: FlashMode; label: string; description: string }[] = [
+    { value: "date", label: "Theo ngày", description: "Ôn từ vựng theo một ngày cụ thể." },
+    { value: "range", label: "Theo range", description: "Ôn từ vựng trong khoảng ngày." },
+    { value: "topic", label: "Theo chủ đề", description: "Ôn theo chủ đề đã gắn." },
+    { value: "all", label: "Random all", description: "Ôn toàn bộ từ vựng, thứ tự ngẫu nhiên." },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -434,58 +488,73 @@ export default function FlashCard() {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-card border border-border/60 p-6 shadow-sm">
-        <Tabs
-          value={mode}
-          onValueChange={(v) => setMode(v as FlashMode)}
-          className="w-full"
-        >
-          <TabsList className="grid w-full grid-cols-4 rounded-xl bg-muted/60">
-            <TabsTrigger value="date" className="rounded-lg">Theo ngày</TabsTrigger>
-            <TabsTrigger value="range" className="rounded-lg">Theo range</TabsTrigger>
-            <TabsTrigger value="topic" className="rounded-lg">Theo chủ đề</TabsTrigger>
-            <TabsTrigger value="all" className="rounded-lg">Random all</TabsTrigger>
-          </TabsList>
-          <TabsContent value="date" className="mt-5">
+      <div className="rounded-2xl bg-card border border-border/60 p-6 shadow-sm space-y-6">
+        {/* Chế độ ôn: dạng thẻ, mỗi thẻ có title + mô tả */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {modeOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setMode(opt.value)}
+              className={cn(
+                "rounded-xl border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                mode === opt.value
+                  ? "border-primary bg-primary/5 shadow-sm"
+                  : "border-border/60 bg-muted/30 hover:border-primary/50 hover:bg-muted/50"
+              )}
+            >
+              <span className="font-semibold text-foreground block">{opt.label}</span>
+              <span className="text-sm text-muted-foreground mt-1 block leading-snug">
+                {opt.description}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Vùng cấu hình theo chế độ — cùng chiều cao, căn chỉnh gọn */}
+        <div className="min-h-[120px] rounded-xl bg-muted/30 border border-border/40 p-4">
+          {mode === "date" && (
             <div className="space-y-2">
-              <Label>Chọn ngày</Label>
+              <Label className="text-foreground">Chọn ngày</Label>
               <Input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="max-w-xs"
+                className="max-w-xs rounded-lg"
               />
             </div>
-          </TabsContent>
-          <TabsContent value="range" className="mt-5">
+          )}
+          {mode === "range" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Từ ngày</Label>
+                <Label className="text-foreground">Từ ngày</Label>
                 <Input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
+                  className="rounded-lg"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Đến ngày</Label>
+                <Label className="text-foreground">Đến ngày</Label>
                 <Input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
+                  className="rounded-lg"
                 />
               </div>
             </div>
-          </TabsContent>
-          <TabsContent value="topic" className="mt-5">
+          )}
+          {mode === "topic" && (
             <div className="space-y-2">
-              <Label>Chủ đề</Label>
+              <Label className="text-foreground">Chủ đề</Label>
               <Select
                 value={topic || undefined}
                 onValueChange={(v) => setTopic(v ?? "")}
                 disabled={loadingTopics}
               >
-                <SelectTrigger className="max-w-xs">
+                <SelectTrigger className="max-w-xs rounded-lg">
                   <SelectValue placeholder="Chọn chủ đề" />
                 </SelectTrigger>
                 <SelectContent>
@@ -504,15 +573,15 @@ export default function FlashCard() {
                 <p className="text-xs text-muted-foreground">Đang tải danh sách chủ đề...</p>
               )}
             </div>
-          </TabsContent>
-          <TabsContent value="all" className="mt-5">
-            <p className="text-sm text-muted-foreground">
-              Ôn toàn bộ từ vựng, thứ tự ngẫu nhiên.
+          )}
+          {mode === "all" && (
+            <p className="text-sm text-muted-foreground py-2">
+              Không cần cấu hình thêm — bấm &quot;Bắt đầu ôn&quot; để ôn toàn bộ từ.
             </p>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
 
-        <div className="mt-6">
+        <div>
           <Button
             onClick={handleStart}
             disabled={loading || (mode === "topic" && loadingTopics)}

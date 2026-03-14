@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { toast } from "sonner";
-import type { VocabEntry, WordType, Meaning } from "@/types/vocab";
-import { WORD_TYPE_LABELS } from "@/types/vocab";
+import type { VocabEntry, WordType, Meaning, SensesByType } from "@/types/vocab";
+import { WORD_TYPE_LABELS, getSensesByType, getOrderedWordTypes } from "@/types/vocab";
 import { apiCreate, apiUpdate, apiGetTopics, apiSearchEntriesByWord } from "@/lib/vocab-api";
 import { apiGetCategories, apiCreateCategory } from "@/lib/category-api";
 import type { Category } from "@/types/category";
@@ -74,22 +74,23 @@ function normalizeMeaning(m: Meaning): Meaning {
   };
 }
 
-function validate(
-  word: string,
-  types: WordType[],
-  meanings: Meaning[]
-): string | null {
+function validateSensesByType(word: string, sensesByType: SensesByType): string | null {
   if (!word.trim()) return "Vui lòng nhập từ.";
+  const types = Object.keys(sensesByType) as WordType[];
   if (types.length === 0) return "Vui lòng chọn ít nhất một loại từ.";
-  if (meanings.length === 0) return "Vui lòng thêm ít nhất một nghĩa.";
-  for (let i = 0; i < meanings.length; i++) {
-    const m = meanings[i];
-    if (!m.vietnamese.trim()) return `Nghĩa ${i + 1}: vui lòng nhập nghĩa tiếng Việt.`;
-    const validExamples = m.examples.map((e) => e.trim()).filter(Boolean);
-    if (validExamples.length === 0)
-      return `Nghĩa ${i + 1}: cần ít nhất một ví dụ.`;
-    if (validExamples.length > 3)
-      return `Nghĩa ${i + 1}: tối đa 3 ví dụ.`;
+  for (const t of types) {
+    const meanings = sensesByType[t] ?? [];
+    if (meanings.length === 0) return `${WORD_TYPE_LABELS[t]}: cần ít nhất một nghĩa.`;
+    for (let i = 0; i < meanings.length; i++) {
+      const m = meanings[i];
+      if (!m.vietnamese.trim())
+        return `${WORD_TYPE_LABELS[t]} — Nghĩa ${i + 1}: vui lòng nhập nghĩa tiếng Việt.`;
+      const validExamples = m.examples.map((e) => e.trim()).filter(Boolean);
+      if (validExamples.length === 0)
+        return `${WORD_TYPE_LABELS[t]} — Nghĩa ${i + 1}: cần ít nhất một ví dụ.`;
+      if (validExamples.length > 3)
+        return `${WORD_TYPE_LABELS[t]} — Nghĩa ${i + 1}: tối đa 3 ví dụ.`;
+    }
   }
   return null;
 }
@@ -125,12 +126,20 @@ function FieldLabel({
   );
 }
 
+function initialSensesFromEntry(entry: VocabEntry | null | undefined): SensesByType {
+  if (!entry) return {};
+  const senses = getSensesByType(entry);
+  if (Object.keys(senses).length > 0) return senses;
+  return {};
+}
+
 export function VocabForm({ mode, initialEntry }: VocabFormProps) {
   const router = useRouter();
   const [word, setWord] = useState("");
   const [phonetic, setPhonetic] = useState("");
-  const [types, setTypes] = useState<WordType[]>([]);
-  const [meanings, setMeanings] = useState<Meaning[]>([{ ...defaultMeaning }]);
+  const [sensesByType, setSensesByType] = useState<SensesByType>(() =>
+    initialSensesFromEntry(initialEntry ?? null)
+  );
   const [notes, setNotes] = useState("");
   const [topic, setTopic] = useState("");
   const [topicSuggestions, setTopicSuggestions] = useState<string[]>([]);
@@ -199,18 +208,7 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
     if (initialEntry) {
       setWord(initialEntry.word);
       setPhonetic(initialEntry.phonetic ?? "");
-      setTypes(initialEntry.types.length ? [...initialEntry.types] : []);
-      setMeanings(
-        initialEntry.meanings.length
-          ? initialEntry.meanings.map((m) => ({
-              vietnamese: m.vietnamese,
-              examples:
-                m.examples.length > 0
-                  ? [...m.examples]
-                  : [""],
-            }))
-          : [{ ...defaultMeaning }]
-      );
+      setSensesByType(initialSensesFromEntry(initialEntry));
       setNotes(initialEntry.notes ?? "");
       setTopic(initialEntry.topic ?? "");
       setCategoryId(initialEntry.categoryId ?? "");
@@ -222,45 +220,67 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
   }, [initialEntry?.id]);
 
   const toggleType = (t: WordType) => {
-    setTypes((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-    );
-  };
-
-  const setMeaning = (index: number, value: Meaning) => {
-    setMeanings((prev) => {
-      const next = [...prev];
-      next[index] = value;
+    setSensesByType((prev) => {
+      const next = { ...prev };
+      if (next[t]) {
+        delete next[t];
+        return next;
+      }
+      next[t] = [{ ...defaultMeaning }];
       return next;
     });
   };
 
-  const addMeaning = () => {
-    setMeanings((prev) => [...prev, { ...defaultMeaning }]);
+  const setMeaningForType = (wordType: WordType, index: number, value: Meaning) => {
+    setSensesByType((prev) => {
+      const list = [...(prev[wordType] ?? [])];
+      list[index] = value;
+      return { ...prev, [wordType]: list };
+    });
   };
 
-  const removeMeaning = (index: number) => {
-    if (meanings.length <= 1) return;
-    setMeanings((prev) => prev.filter((_, i) => i !== index));
+  const addMeaningForType = (wordType: WordType) => {
+    setSensesByType((prev) => ({
+      ...prev,
+      [wordType]: [...(prev[wordType] ?? []), { ...defaultMeaning }],
+    }));
+  };
+
+  const removeMeaningForType = (wordType: WordType, index: number) => {
+    setSensesByType((prev) => {
+      const list = prev[wordType] ?? [];
+      if (list.length <= 1) return prev;
+      return { ...prev, [wordType]: list.filter((_, i) => i !== index) };
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const err = validate(word, types, meanings);
+    const err = validateSensesByType(word, sensesByType);
     if (err) {
       toast.error(err);
       return;
     }
 
-    const normalizedMeanings = meanings.map(normalizeMeaning).filter((m) => m.vietnamese && m.examples.some(Boolean));
-    if (normalizedMeanings.length === 0) {
+    const normalized: SensesByType = {};
+    for (const t of getOrderedWordTypes()) {
+      const list = sensesByType[t] ?? [];
+      const normalizedList = list
+        .map(normalizeMeaning)
+        .filter((m) => m.vietnamese && m.examples.some(Boolean));
+      if (normalizedList.length > 0) {
+        normalized[t] = normalizedList.map((m) => ({
+          vietnamese: m.vietnamese,
+          examples: m.examples.slice(0, 3),
+        }));
+      }
+    }
+    if (Object.keys(normalized).length === 0) {
       toast.error("Cần ít nhất một nghĩa có nội dung.");
       return;
     }
-    const finalMeanings: Meaning[] = normalizedMeanings.map((m) => ({
-      vietnamese: m.vietnamese,
-      examples: m.examples.slice(0, 3),
-    }));
+    const finalTypes = Object.keys(normalized) as WordType[];
+    const finalMeanings = Object.values(normalized).flat();
 
     if (mode === "add" && duplicateEntry) {
       toast.error("Từ này đã tồn tại. Vui lòng sửa từ hiện có hoặc nhập từ khác.");
@@ -273,8 +293,9 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
         const data: VocabEntryCreate = {
           word: word.trim(),
           phonetic: phonetic.trim() || undefined,
-          types,
+          types: finalTypes,
           meanings: finalMeanings,
+          sensesByType: normalized,
           notes: notes.trim() || undefined,
           topic: topic.trim() || undefined,
           categoryId: categoryId.trim() || undefined,
@@ -290,8 +311,9 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
           ...initialEntry,
           word: word.trim(),
           phonetic: phonetic.trim() || undefined,
-          types,
+          types: finalTypes,
           meanings: finalMeanings,
+          sensesByType: normalized,
           notes: notes.trim() || undefined,
           topic: topic.trim() || undefined,
           categoryId: categoryId.trim() || undefined,
@@ -372,9 +394,12 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
               </div>
             </div>
 
-            {/* Loại từ: multiple choice checkboxes */}
+            {/* Loại từ: chọn loại nào thì có section nghĩa riêng cho loại đó */}
             <div className="space-y-2">
               <FieldLabel icon={Tag} required>Loại từ</FieldLabel>
+              <p className="text-xs text-muted-foreground">
+                Chọn từng loại (danh từ, động từ, …); mỗi loại có một khối để ghi nghĩa và ví dụ.
+              </p>
               <div className="flex flex-wrap gap-4" role="group" aria-label="Chọn loại từ">
                 {WORD_TYPES.map((t) => (
                   <label
@@ -382,7 +407,7 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
                     className="flex items-center gap-2 cursor-pointer select-none"
                   >
                     <Checkbox
-                      checked={types.includes(t)}
+                      checked={!!sensesByType[t]?.length}
                       onCheckedChange={() => toggleType(t)}
                       aria-label={WORD_TYPE_LABELS[t]}
                     />
@@ -392,27 +417,53 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
               </div>
             </div>
 
-            {/* Vietnamese meanings */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <FieldLabel icon={Languages} required>Nghĩa tiếng Việt</FieldLabel>
-                <Button type="button" variant="ghost" size="sm" onClick={addMeaning} className="text-primary hover:text-primary hover:bg-primary/10">
-                  <Plus className="size-4 mr-1" />
-                  Thêm nghĩa
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {meanings.map((m, i) => (
-                  <MeaningBlock
-                    key={i}
-                    index={i}
-                    value={m}
-                    onChange={(v) => setMeaning(i, v)}
-                    onRemove={() => removeMeaning(i)}
-                    canRemove={meanings.length > 1}
-                  />
-                ))}
-              </div>
+            {/* Nghĩa + ví dụ theo từng loại từ */}
+            <div className="space-y-6">
+              <FieldLabel icon={Languages} required>Nghĩa và ví dụ theo loại từ</FieldLabel>
+              {getOrderedWordTypes()
+                .filter((t) => sensesByType[t]?.length)
+                .map((wordType) => {
+                  const meanings = sensesByType[wordType] ?? [];
+                  return (
+                    <div
+                      key={wordType}
+                      className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-foreground">
+                          {WORD_TYPE_LABELS[wordType]}
+                        </h3>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => addMeaningForType(wordType)}
+                          className="text-primary hover:text-primary hover:bg-primary/10"
+                        >
+                          <Plus className="size-4 mr-1" />
+                          Thêm nghĩa
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        {meanings.map((m, i) => (
+                          <MeaningBlock
+                            key={`${wordType}-${i}`}
+                            index={i}
+                            value={m}
+                            onChange={(v) => setMeaningForType(wordType, i, v)}
+                            onRemove={() => removeMeaningForType(wordType, i)}
+                            canRemove={meanings.length > 1}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              {Object.keys(sensesByType).length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Chọn ít nhất một loại từ ở trên để thêm nghĩa và ví dụ.
+                </p>
+              )}
             </div>
 
           </div>
