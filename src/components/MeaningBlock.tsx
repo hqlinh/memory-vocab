@@ -53,13 +53,10 @@ export function MeaningBlock({
       <div className="space-y-2">
         <Label className="text-sm font-medium">Ví dụ (1–3 câu, mỗi câu một dòng)</Label>
         <Textarea
-          value={value.examples.filter(Boolean).join("\n")}
+          value={value.examples.join("\n")}
           onChange={(e) => {
-            const lines = e.target.value
-              .split("\n")
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .slice(0, MAX_EXAMPLES);
+            const raw = e.target.value;
+            const lines = raw.split("\n").slice(0, MAX_EXAMPLES);
             onChange({ ...value, examples: lines.length ? lines : [""] });
           }}
           placeholder="Nhập câu ví dụ, mỗi câu một dòng..."

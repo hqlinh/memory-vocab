@@ -8,6 +8,7 @@ import {
   apiGetTopics,
 } from "@/lib/vocab-api";
 import { apiGetCategories } from "@/lib/category-api";
+import { getListCache, setListCache, invalidateListCache } from "@/lib/list-cache";
 import type { Category } from "@/types/category";
 import type { VocabEntry, WordType } from "@/types/vocab";
 import { WORD_TYPE_LABELS, getSensesByType, getOrderedWordTypes } from "@/types/vocab";
@@ -66,10 +67,15 @@ export default function VocabList() {
   const [filterTypes, setFilterTypes] = useState<WordType[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; word: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRevalidating, setIsRevalidating] = useState(false);
 
-  const loadData = async () => {
-    setLoading(true);
-    setLoadError(null);
+  const loadData = async (background = false) => {
+    if (!background) {
+      setLoading(true);
+      setLoadError(null);
+    } else {
+      setIsRevalidating(true);
+    }
     try {
       const [allEntries, topicList, categoryList] = await Promise.all([
         apiGetAll(),
@@ -79,18 +85,32 @@ export default function VocabList() {
       setEntries(allEntries);
       setTopics(topicList);
       setCategories(categoryList);
+      setListCache(allEntries, topicList, categoryList);
+      setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Không tải được danh sách.");
-      setEntries([]);
-      setTopics([]);
-      setCategories([]);
+      if (!background) {
+        setLoadError(e instanceof Error ? e.message : "Không tải được danh sách.");
+        setEntries([]);
+        setTopics([]);
+        setCategories([]);
+      }
     } finally {
       setLoading(false);
+      setIsRevalidating(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    const cache = getListCache();
+    if (cache) {
+      setEntries(cache.entries);
+      setTopics(cache.topics);
+      setCategories(cache.categories);
+      setLoading(false);
+      loadData(true);
+    } else {
+      loadData(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -130,6 +150,7 @@ export default function VocabList() {
   const handleDelete = async (id: string) => {
     try {
       await apiDelete(id);
+      invalidateListCache();
       setEntries((prev) => prev.filter((e) => e.id !== id));
       setDetailId((prev) => (prev === id ? null : prev));
       setDeleteConfirm(null);
@@ -200,7 +221,12 @@ export default function VocabList() {
         </div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Danh sách từ vựng</h1>
-          <p className="text-sm text-muted-foreground">{entries.length} từ đã lưu</p>
+          <p className="text-sm text-muted-foreground">
+            {entries.length} từ đã lưu
+            {isRevalidating && (
+              <span className="ml-2 text-muted-foreground/80">(đang cập nhật…)</span>
+            )}
+          </p>
         </div>
       </div>
 
