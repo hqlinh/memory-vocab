@@ -36,58 +36,70 @@ export function usePronunciation(word: string | undefined) {
   const [state, setState] = useState<State>(() => getInitialState(key));
 
   useEffect(() => {
-    setState(getInitialState(key));
+    if (!key) {
+      setState(getInitialState(key));
+      return;
+    }
+
+    const cached = clientCache.get(key);
+    if (cached) {
+      setState({ ...cached, loading: false });
+      return;
+    }
+
+    let isMounted = true;
+    setState({ audioUrl: null, phonetic: null, loading: true, error: null });
+
+    fetch(`/api/pronunciation/${encodeURIComponent(key)}`)
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const err = data?.error ?? "Không tìm thấy phát âm";
+          const next = { audioUrl: null, phonetic: null, loading: false, error: err };
+          clientCache.set(key, next);
+          if (isMounted) setState(next);
+          return;
+        }
+        const { audioUrl, phonetic } = data;
+        const next = {
+          audioUrl: audioUrl ?? null,
+          phonetic: phonetic ?? null,
+          loading: false,
+          error: null,
+        };
+        clientCache.set(key, next);
+        if (isMounted) setState(next);
+      })
+      .catch(() => {
+        const next = { audioUrl: null, phonetic: null, loading: false, error: "Lỗi tải phát âm" };
+        clientCache.set(key, next);
+        if (isMounted) setState(next);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [key]);
 
-  const fetchPronunciation = useCallback(async () => {
+  const play = useCallback(() => {
     if (!key) return;
     const textToSpeak = word?.trim() || key;
     const playFallback = () => speakWithBrowser(textToSpeak);
 
-    const cached = clientCache.get(key);
-    if (cached?.audioUrl) {
-      const audio = new Audio(cached.audioUrl);
-      audio.play().catch(playFallback);
-      return;
-    }
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const res = await fetch(`/api/pronunciation/${encodeURIComponent(key)}`);
-      const data = await res.json();
-      if (!res.ok) {
-        const err = data?.error ?? "Không tìm thấy phát âm";
-        setState({ audioUrl: null, phonetic: null, loading: false, error: err });
-        playFallback();
-        return;
-      }
-      const { audioUrl, phonetic } = data;
-      const next = {
-        audioUrl: audioUrl ?? null,
-        phonetic: phonetic ?? null,
-        loading: false,
-        error: null,
-      };
-      clientCache.set(key, next);
-      setState(next);
-      if (audioUrl) {
-        const audio = new Audio(audioUrl);
+    if (state.audioUrl) {
+      try {
+        const audio = new Audio(state.audioUrl);
         audio.play().catch(playFallback);
-      } else {
+      } catch {
         playFallback();
       }
-    } catch {
-      setState({
-        audioUrl: null,
-        phonetic: null,
-        loading: false,
-        error: "Lỗi tải phát âm",
-      });
+    } else {
       playFallback();
     }
-  }, [key, word]);
+  }, [key, word, state.audioUrl]);
 
   return {
     ...state,
-    play: fetchPronunciation,
+    play,
   };
 }

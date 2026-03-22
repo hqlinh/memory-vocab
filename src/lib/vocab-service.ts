@@ -68,10 +68,11 @@ export async function create(data: VocabEntryCreate): Promise<VocabEntry> {
 }
 
 export async function update(entry: VocabEntry): Promise<VocabEntry> {
-  const updated: VocabEntry = {
+  const updated: any = {
     ...entry,
     updatedAt: nowISO(),
   };
+  delete updated._id;
   const col = await getVocabCollection();
   await col.updateOne(
     { id: entry.id },

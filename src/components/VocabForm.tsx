@@ -6,6 +6,7 @@ import type { VocabEntry, WordType, Meaning, SensesByType } from "@/types/vocab"
 import { WORD_TYPE_LABELS, getSensesByType, getOrderedWordTypes } from "@/types/vocab";
 import { apiCreate, apiUpdate, apiGetTopics, apiSearchEntriesByWord } from "@/lib/vocab-api";
 import { apiGetCategories, apiCreateCategory } from "@/lib/category-api";
+import { apiDeleteQuickNote } from "@/lib/quick-note-api";
 import type { Category } from "@/types/category";
 import type { VocabEntryCreate } from "@/types/vocab";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ export type VocabFormMode = "add" | "edit";
 export interface VocabFormProps {
   mode: VocabFormMode;
   initialEntry?: VocabEntry | null;
+  quickNoteId?: string;
 }
 
 function normalizeMeaning(m: Meaning): Meaning {
@@ -133,7 +135,7 @@ function initialSensesFromEntry(entry: VocabEntry | null | undefined): SensesByT
   return {};
 }
 
-export function VocabForm({ mode, initialEntry }: VocabFormProps) {
+export function VocabForm({ mode, initialEntry, quickNoteId }: VocabFormProps) {
   const router = useRouter();
   const [word, setWord] = useState("");
   const [phonetic, setPhonetic] = useState("");
@@ -305,6 +307,13 @@ export function VocabForm({ mode, initialEntry }: VocabFormProps) {
           antonymIds: antonymIds.length ? antonymIds : undefined,
         };
         await apiCreate(data);
+        if (quickNoteId) {
+          try {
+            await apiDeleteQuickNote(quickNoteId);
+          } catch (e) {
+            console.error("Failed to delete quick note", e);
+          }
+        }
         toast.success("Đã thêm từ.");
       } else if (initialEntry) {
         const updated: VocabEntry = {

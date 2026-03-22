@@ -20,6 +20,7 @@ export async function getClient(): Promise<MongoClient> {
 const DB_NAME = "memory-vocab";
 const VOCAB_COLLECTION = "vocab";
 const CATEGORY_COLLECTION = "categories";
+const QUICK_NOTE_COLLECTION = "quick_notes";
 
 export async function getDb(): Promise<Db> {
   const client = await getClient();
@@ -35,6 +36,7 @@ export async function getDb(): Promise<Db> {
 async function ensureIndexes(db: Db): Promise<void> {
   const vocab = db.collection(VOCAB_COLLECTION);
   const categories = db.collection(CATEGORY_COLLECTION);
+  const quickNotes = db.collection(QUICK_NOTE_COLLECTION);
 
   await Promise.all([
     // vocab: id (unique) — getById, update, delete, getEntriesByIds
@@ -56,6 +58,10 @@ async function ensureIndexes(db: Db): Promise<void> {
     categories.createIndex({ id: 1 }, { unique: true }),
     // categories: sort theo name — getAllCategories
     categories.createIndex({ name: 1 }),
+
+    // quick_notes: id (unique), sort theo createdAt
+    quickNotes.createIndex({ id: 1 }, { unique: true }),
+    quickNotes.createIndex({ createdAt: -1 }),
   ]);
 }
 
@@ -67,4 +73,9 @@ export async function getVocabCollection() {
 export async function getCategoryCollection() {
   const db = await getDb();
   return db.collection<import("@/types/category").Category>(CATEGORY_COLLECTION);
+}
+
+export async function getQuickNoteCollection() {
+  const db = await getDb();
+  return db.collection<import("@/types/quick-note").QuickNote>(QUICK_NOTE_COLLECTION);
 }

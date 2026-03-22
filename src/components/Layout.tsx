@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { cn } from "@/lib/utils";
-import { Plus, List, Layers, BookOpen, FolderTree } from "lucide-react";
+import { Plus, List, Layers, BookOpen, FolderTree, StickyNote } from "lucide-react";
 
 const navItems = [
   { href: "/", icon: BookOpen, label: "Trang chủ", exact: true },
   { href: "/add", icon: Plus, label: "Thêm từ", exact: false },
   { href: "/list", icon: List, label: "Danh sách", exact: false },
+  { href: "/quick-notes", icon: StickyNote, label: "Note nhanh", exact: false },
   { href: "/categories", icon: FolderTree, label: "Category", exact: false },
   { href: "/flash", icon: Layers, label: "Flash card", exact: false },
 ];
